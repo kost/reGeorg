@@ -1,5 +1,8 @@
 reGeorg
 =========
+Fork of regeorg to include support for python2 and python3 and to have
+proper socks4 and socks5 support.
+
 
 ```                    _____
   _____   ______  __|___  |__  ______  _____  _____   ______
@@ -9,25 +12,19 @@ reGeorg
                     |_____|
                     ... every office needs a tool like Georg
 ```
-willem@sensepost.com / [@\_w\_m\_\_]
-
-sam@sensepost.com / [@trowalts]
-
-etienne@sensepost.com / [@kamp_staaldraad]
-
 
 Version
 ----
 
-1.0
+2.0
 
 Dependencies
 -----------
 
-reGeorg requires Python 2.7 and the following modules:
+reGeorg works with both Python 2.7 and Python 3.x and the following modules:
 
 * [urllib3] - HTTP library with thread-safe connection pooling, file post, and more.
- 
+
 
 Usage
 --------------
@@ -73,9 +70,17 @@ License
 
 MIT
 
+Credits
+----
 
+This fork is maintained by
+[@k0st]:http://twitter.com/k0st
+
+Original by:
 [@\_w\_m\_\_]:http://twitter.com/_w_m__
 [@trowalts]:http://twitter.com/trowalts
 [@kamp_staaldraad]:http://twitter.com/kamp_staaldraad
+
+Tools:
 [urllib3]:https://pypi.python.org/pypi/urllib3
 [proxychains]:http://sourceforge.net/projects/proxychains/
