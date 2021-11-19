@@ -78,13 +78,18 @@ Credits
 ----
 
 This fork is maintained by
+
 [@k0st]:http://twitter.com/k0st
 
 Original by:
 [@\_w\_m\_\_]:http://twitter.com/_w_m__
+
 [@trowalts]:http://twitter.com/trowalts
+
 [@kamp_staaldraad]:http://twitter.com/kamp_staaldraad
 
 Tools:
+
 [urllib3]:https://pypi.python.org/pypi/urllib3
+
 [proxychains]:http://sourceforge.net/projects/proxychains/
