@@ -13,10 +13,14 @@ proper socks4 and socks5 support.
                     ... every office needs a tool like Georg
 ```
 
-Version
+Installation
 ----
 
-2.0
+You can install it via pip:
+```
+pip install regeorg
+```
+
 
 Dependencies
 -----------
