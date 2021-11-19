@@ -5,27 +5,32 @@ import logging
 import argparse
 import urllib3
 from threading import Thread
-from urlparse import urlparse
+try:
+    from urllib.parse import urlparse
+except ImportError:
+     from urlparse import urlparse
 from socket import *
 from threading import Thread
 from time import sleep
+import struct
 
 # Constants
 SOCKTIMEOUT = 5
 RESENDTIMEOUT = 300
-VER = "\x05"
-METHOD = "\x00"
-SUCCESS = "\x00"
-SOCKFAIL = "\x01"
-NETWORKFAIL = "\x02"
-HOSTFAIL = "\x04"
-REFUSED = "\x05"
-TTLEXPIRED = "\x06"
-UNSUPPORTCMD = "\x07"
-ADDRTYPEUNSPPORT = "\x08"
-UNASSIGNED = "\x09"
+VER4 = b"\x04"
+VER = b"\x05"
+METHOD = b"\x00"
+SUCCESS = b"\x00"
+SOCKFAIL = b"\x01"
+NETWORKFAIL = b"\x02"
+HOSTFAIL = b"\x04"
+REFUSED = b"\x05"
+TTLEXPIRED = b"\x06"
+UNSUPPORTCMD = b"\x07"
+ADDRTYPEUNSPPORT = b"\x08"
+UNASSIGNED = b"\x09"
 
-BASICCHECKSTRING = "Georg says, 'All seems fine'"
+BASICCHECKSTRING = b"Georg says, 'All seems fine'"
 
 # Globals
 READBUFSIZE = 1024
@@ -133,53 +138,64 @@ class session(Thread):
             self.httpScheme = urllib3.HTTPConnectionPool
         else:
             self.httpScheme = urllib3.HTTPSConnectionPool
+        log.debug("finished init")
 
     def parseSocks5(self, sock):
         log.debug("SocksVersion5 detected")
-        nmethods, methods = (sock.recv(1), sock.recv(1))
+        nmethods = sock.recv(1)
+        methods = sock.recv(ord(nmethods))
         sock.sendall(VER + METHOD)
         ver = sock.recv(1)
-        if ver == "\x02":  # this is a hack for proxychains
+        if ver == b"\x02":  # this is a hack for proxychains
             ver, cmd, rsv, atyp = (sock.recv(1), sock.recv(1), sock.recv(1), sock.recv(1))
         else:
             cmd, rsv, atyp = (sock.recv(1), sock.recv(1), sock.recv(1))
         target = None
         targetPort = None
-        if atyp == "\x01":  # IPv4
+        if atyp == b"\x01":  # IPv4
             # Reading 6 bytes for the IP and Port
             target = sock.recv(4)
             targetPort = sock.recv(2)
-            target = "." .join([str(ord(i)) for i in target])
-        elif atyp == "\x03":  # Hostname
+            target = inet_ntoa(target)
+            # target = "." .join([str(ord(i)) for i in target])
+        elif atyp == b"\x03":  # Hostname
             targetLen = ord(sock.recv(1))  # hostname length (1 byte)
             target = sock.recv(targetLen)
             targetPort = sock.recv(2)
-            target = "".join([unichr(ord(i)) for i in target])
-        elif atyp == "\x04":  # IPv6
+            # target = "".join([unichr(ord(i)) for i in target])
+            target = target.decode()
+        elif atyp == b"\x04":  # IPv6
             target = sock.recv(16)
             targetPort = sock.recv(2)
-            tmp_addr = []
-            for i in xrange(len(target) / 2):
-                tmp_addr.append(unichr(ord(target[2 * i]) * 256 + ord(target[2 * i + 1])))
-            target = ":".join(tmp_addr)
-        targetPort = ord(targetPort[0]) * 256 + ord(targetPort[1])
-        if cmd == "\x02":  # BIND
+            target = inet_ntop(AF_INET6, target)
+            #tmp_addr = []
+            #for i in xrange(len(target) / 2):
+            #    tmp_addr.append(unichr(ord(target[2 * i]) * 256 + ord(target[2 * i + 1])))
+            #target = ":".join(tmp_addr)
+        if targetPort == None:
+            return False
+        # targetPort = ord(targetPort[0]) * 256 + ord(targetPort[1])
+        targetPortNum = struct.unpack('>H', targetPort)[0]
+        if cmd == b"\x02":  # BIND
             raise SocksCmdNotImplemented("Socks5 - BIND not implemented")
-        elif cmd == "\x03":  # UDP
+        elif cmd == b"\x03":  # UDP
             raise SocksCmdNotImplemented("Socks5 - UDP not implemented")
-        elif cmd == "\x01":  # CONNECT
-            serverIp = target
+        elif cmd == b"\x01":  # CONNECT
+            # serverIp = target
+            serverIp = inet_aton(target)
             try:
                 serverIp = gethostbyname(target)
             except:
                 log.error("oeps")
-            serverIp = "".join([chr(int(i)) for i in serverIp.split(".")])
-            self.cookie = self.setupRemoteSession(target, targetPort)
+            # serverIp = "".join([chr(int(i)) for i in serverIp.split(".")])
+            self.cookie = self.setupRemoteSession(target, targetPortNum)
+            # kst added below
+            serverIp = inet_aton(target)
             if self.cookie:
-                sock.sendall(VER + SUCCESS + "\x00" + "\x01" + serverIp + chr(targetPort / 256) + chr(targetPort % 256))
+                sock.sendall(VER + SUCCESS + b"\x00" + b"\x01" + serverIp + targetPort)
                 return True
             else:
-                sock.sendall(VER + REFUSED + "\x00" + "\x01" + serverIp + chr(targetPort / 256) + chr(targetPort % 256))
+                sock.sendall(VER + REFUSED + b"\x00" + b"\x01" + serverIp + targetPort)
                 raise RemoteConnectionFailed("[%s:%d] Remote failed" % (target, targetPort))
 
         raise SocksCmdNotImplemented("Socks5 - Unknown CMD")
@@ -187,38 +203,52 @@ class session(Thread):
     def parseSocks4(self, sock):
         log.debug("SocksVersion4 detected")
         cmd = sock.recv(1)
-        if cmd == "\x01":  # Connect
+        if cmd == b"\x01":  # Connect
             targetPort = sock.recv(2)
-            targetPort = ord(targetPort[0]) * 256 + ord(targetPort[1])
+            # targetPort = ord(targetPort[0]) * 256 + ord(targetPort[1])
+            targetPortNum = struct.unpack('>H', targetPort)[0]
+            targetPortOrd = struct.pack(">h", targetPortNum)
             target = sock.recv(4)
             sock.recv(1)
-            target = ".".join([str(ord(i)) for i in target])
+            # target = ".".join([str(ord(i)) for i in target])
+            target = inet_ntoa(target)
+            # target = inet_aton(str(target))
             serverIp = target
+            log.debug("1 Connecting to %s:%s" % (target, serverIp))
             try:
                 serverIp = gethostbyname(target)
             except:
                 log.error("oeps")
-            serverIp = "".join([chr(int(i)) for i in serverIp.split(".")])
-            self.cookie = self.setupRemoteSession(target, targetPort)
+            log.debug("1 Resolved %s to %s" % (target, serverIp))
+            serverIp = inet_aton(str(serverIp))
+            # log.debug("2 Connecting to %s:%s" % (target, serverIp))
+            log.debug("3 Connecting to %s:%d" % (target, targetPortNum))
+            self.cookie = self.setupRemoteSession(target, targetPortNum)
             if self.cookie:
-                sock.sendall(chr(0) + chr(90) + serverIp + chr(targetPort / 256) + chr(targetPort % 256))
+                log.debug("[%s:%d] success of getting cookie" % (target, targetPortNum))
+                barr=b"\x00" + b"\x5A" + serverIp + targetPortOrd
+                sock.sendall(barr)
                 return True
             else:
-                sock.sendall("\x00" + "\x91" + serverIp + chr(targetPort / 256) + chr(targetPort % 256))
+                log.debug("[%s:%d] not success of getting cookie" % (target, targetPortNum))
+                barr=b"\x00" + b"\x5B" + serverIp + targetPortOrd
+                sock.sendall(barr)
                 raise RemoteConnectionFailed("Remote connection failed")
         else:
             raise SocksProtocolNotImplemented("Socks4 - Command [%d] Not implemented" % ord(cmd))
 
     def handleSocks(self, sock):
         # This is where we setup the socks connection
+        log.debug("handleSocks()")
         ver = sock.recv(1)
-        if ver == "\x05":
+        if ver == b"\x05":
             return self.parseSocks5(sock)
-        elif ver == "\x04":
+        elif ver == b"\x04":
             return self.parseSocks4(sock)
 
     def setupRemoteSession(self, target, port):
-        headers = {"X-CMD": "CONNECT", "X-TARGET": target, "X-PORT": port}
+        log.debug("setupRemoteSession()")
+        headers = {"X-CMD": "CONNECT", "X-TARGET": target, "X-PORT": str(port)}
         self.target = target
         self.port = port
         cookie = None
@@ -237,6 +267,7 @@ class session(Thread):
             log.error("[%s:%d] HTTP [%d]: [%s]" % (self.target, self.port, response.status, response.getheader("X-ERROR")))
             log.error("[%s:%d] RemoteError: %s" % (self.target, self.port, response.data))
         conn.close()
+        log.debug("setupRemoteSession()-end")
         return cookie
 
     def closeRemoteSession(self):
@@ -254,7 +285,7 @@ class session(Thread):
             try:
                 if not self.pSocket:
                     break
-                data = ""
+                # data = b""
                 headers = {"X-CMD": "READ", "Cookie": self.cookie, "Connection": "Keep-Alive"}
                 response = conn.urlopen('POST', self.connectString + "?cmd=read", headers=headers, body="")
                 data = None
@@ -271,21 +302,23 @@ class session(Thread):
                         except:
                             pass
                         if data is None:
-                            data = ""
+                            data = b""
                     else:
                         data = None
                         log.error("[%s:%d] HTTP [%d]: Status: [%s]: Message [%s] Shutting down" % (self.target, self.port, response.status, status, response.getheader("X-ERROR")))
                 else:
                     log.error("[%s:%d] HTTP [%d]: Shutting down" % (self.target, self.port, response.status))
                 if data is None:
+                    log.debug("[%s:%d] data is None" % (self.target, self.port))
                     # Remote socket closed
                     break
                 if len(data) == 0:
+                    log.debug("[%s:%d] len(data)==0" % (self.target, self.port))
                     sleep(0.1)
                     continue
                 transferLog.info("[%s:%d] <<<< [%d]" % (self.target, self.port, len(data)))
                 self.pSocket.send(data)
-            except Exception, ex:
+            except Exception as ex:
                 raise ex
         self.closeRemoteSession()
         log.debug("[%s:%d] Closing localsocket" % (self.target, self.port))
@@ -303,6 +336,7 @@ class session(Thread):
                 data = self.pSocket.recv(READBUFSIZE)
                 if not data:
                     break
+
                 headers = {"X-CMD": "FORWARD", "Cookie": self.cookie, "Content-Type": "application/octet-stream", "Connection": "Keep-Alive"}
                 response = conn.urlopen('POST', self.connectString + "?cmd=forward", headers=headers, body=data)
                 if response.status == 200:
@@ -319,7 +353,7 @@ class session(Thread):
                 transferLog.info("[%s:%d] >>>> [%d]" % (self.target, self.port, len(data)))
             except timeout:
                 continue
-            except Exception, ex:
+            except Exception as ex:
                 raise ex
                 break
         self.closeRemoteSession()
@@ -330,6 +364,7 @@ class session(Thread):
             log.debug("Localsocket already closed")
 
     def run(self):
+        log.debug("run()")
         try:
             if self.handleSocks(self.pSocket):
                 log.debug("Staring reader")
@@ -340,13 +375,13 @@ class session(Thread):
                 w.start()
                 r.join()
                 w.join()
-        except SocksCmdNotImplemented, si:
+        except SocksCmdNotImplemented as si:
             log.error(si.message)
             self.pSocket.close()
-        except SocksProtocolNotImplemented, spi:
+        except SocksProtocolNotImplemented as spi:
             log.error(spi.message)
             self.pSocket.close()
-        except Exception, e:
+        except Exception as e:
             log.error(e.message)
             self.closeRemoteSession()
             self.pSocket.close()
@@ -373,6 +408,7 @@ def askGeorg(connectString):
     conn = httpScheme(host=httpHost, port=httpPort)
     response = conn.request("GET", httpPath)
     if response.status == 200:
+        print(response.data.strip())
         if BASICCHECKSTRING == response.data.strip():
             log.info(BASICCHECKSTRING)
             return True
@@ -380,7 +416,7 @@ def askGeorg(connectString):
     return False
 
 if __name__ == '__main__':
-    print """\033[1m
+    print("""\033[1m
     \033[1;33m
                      _____
   _____   ______  __|___  |__  ______  _____  _____   ______
@@ -394,7 +430,7 @@ if __name__ == '__main__':
   sam@sensepost.com / @trowalts
   etienne@sensepost.com / @kamp_staaldraad
   \033[0m
-   """
+   """)
     log.setLevel(logging.DEBUG)
     parser = argparse.ArgumentParser(description='Socks server for reGeorg HTTP(s) tunneller')
     parser.add_argument("-l", "--listen-on", metavar="", help="The default listening address", default="127.0.0.1")
@@ -423,8 +459,8 @@ if __name__ == '__main__':
             sock.settimeout(SOCKTIMEOUT)
             log.debug("Incomming connection")
             session(sock, args.url).start()
-        except KeyboardInterrupt, ex:
+        except KeyboardInterrupt as ex:
             break
-        except Exception, e:
+        except Exception as e:
             log.error(e)
     servSock.close()
