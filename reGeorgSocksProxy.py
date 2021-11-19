@@ -429,6 +429,7 @@ if __name__ == '__main__':
   willem@sensepost.com / @_w_m__
   sam@sensepost.com / @trowalts
   etienne@sensepost.com / @kamp_staaldraad
+  kost/ @k0st
   \033[0m
    """)
     log.setLevel(logging.DEBUG)
