@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import base64
 import argparse
 import urllib3
 from threading import Thread
@@ -31,6 +32,7 @@ ADDRTYPEUNSPPORT = b"\x08"
 UNASSIGNED = b"\x09"
 
 BASICCHECKSTRING = b"Georg says, 'All seems fine'"
+BASICAUTH=""
 
 # Globals
 READBUFSIZE = 1024
@@ -196,7 +198,7 @@ class session(Thread):
                 return True
             else:
                 sock.sendall(VER + REFUSED + b"\x00" + b"\x01" + serverIp + targetPort)
-                raise RemoteConnectionFailed("[%s:%d] Remote failed" % (target, targetPort))
+                raise RemoteConnectionFailed("[%s:%d] Remote failed" % (target, targetPortNum))
 
         raise SocksCmdNotImplemented("Socks5 - Unknown CMD")
 
@@ -249,6 +251,10 @@ class session(Thread):
     def setupRemoteSession(self, target, port):
         log.debug("setupRemoteSession()")
         headers = {"X-CMD": "CONNECT", "X-TARGET": target, "X-PORT": str(port)}
+        if BASICAUTH != "":
+            headers['Authorization'] = ("Basic %s") % BASICAUTH
+            log.debug("headers['Authorization']")
+            log.debug(headers['Authorization'])
         self.target = target
         self.port = port
         cookie = None
@@ -272,6 +278,8 @@ class session(Thread):
 
     def closeRemoteSession(self):
         headers = {"X-CMD": "DISCONNECT", "Cookie": self.cookie}
+        if BASICAUTH != "":
+            headers['Authorization'] = "Basic %s" % BASICAUTH
         params = ""
         conn = self.httpScheme(host=self.httpHost, port=self.httpPort)
         response = conn.request("POST", self.httpPath + "?cmd=disconnect", params, headers)
@@ -287,6 +295,8 @@ class session(Thread):
                     break
                 # data = b""
                 headers = {"X-CMD": "READ", "Cookie": self.cookie, "Connection": "Keep-Alive"}
+                if BASICAUTH != "":
+                    headers['Authorization'] = "Basic %s" % BASICAUTH
                 response = conn.urlopen('POST', self.connectString + "?cmd=read", headers=headers, body="")
                 data = None
                 if response.status == 200:
@@ -338,6 +348,8 @@ class session(Thread):
                     break
 
                 headers = {"X-CMD": "FORWARD", "Cookie": self.cookie, "Content-Type": "application/octet-stream", "Connection": "Keep-Alive"}
+                if BASICAUTH != "":
+                    headers['Authorization'] = "Basic %s" % BASICAUTH
                 response = conn.urlopen('POST', self.connectString + "?cmd=forward", headers=headers, body=data)
                 if response.status == 200:
                     status = response.getheader("x-status")
@@ -387,7 +399,8 @@ class session(Thread):
             self.pSocket.close()
 
 
-def askGeorg(connectString):
+def askGeorg(connectString, creds):
+    global BASICAUTH
     connectString = connectString
     o = urlparse(connectString)
     try:
@@ -406,9 +419,16 @@ def askGeorg(connectString):
         httpScheme = urllib3.HTTPSConnectionPool
 
     conn = httpScheme(host=httpHost, port=httpPort)
-    response = conn.request("GET", httpPath)
+    if creds != "":
+        headers = urllib3.make_headers(basic_auth=creds)
+        response = conn.request("GET", httpPath, headers=headers)
+        BASICAUTH=base64.b64encode(creds.encode()).decode()
+        log.debug(BASICAUTH)
+    else:
+        response = conn.request("GET", httpPath)
+    print(response.data.strip())
     if response.status == 200:
-        print(response.data.strip())
+        # print(response.data.strip())
         if BASICCHECKSTRING == response.data.strip():
             log.info(BASICCHECKSTRING)
             return True
@@ -434,6 +454,7 @@ if __name__ == '__main__':
    """)
     log.setLevel(logging.DEBUG)
     parser = argparse.ArgumentParser(description='Socks server for reGeorg HTTP(s) tunneller')
+    parser.add_argument("-c", "--creds", metavar="", help="Credentials for basic authentication as user:pass", default="")
     parser.add_argument("-l", "--listen-on", metavar="", help="The default listening address", default="127.0.0.1")
     parser.add_argument("-p", "--listen-port", metavar="", help="The default listening port", type=int, default="8888")
     parser.add_argument("-r", "--read-buff", metavar="", help="Local read buffer, max data to be sent per POST", type=int, default="1024")
@@ -446,7 +467,7 @@ if __name__ == '__main__':
 
     log.info("Starting socks server [%s:%d], tunnel at [%s]" % (args.listen_on, args.listen_port, args.url))
     log.info("Checking if Georg is ready")
-    if not askGeorg(args.url):
+    if not askGeorg(args.url, args.creds):
         log.info("Georg is not ready, please check url")
         exit()
     READBUFSIZE = args.read_buff
