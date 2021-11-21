@@ -3,6 +3,7 @@
 
 import logging
 import base64
+import ssl
 import argparse
 import urllib3
 from threading import Thread
@@ -33,6 +34,9 @@ UNASSIGNED = b"\x09"
 
 BASICCHECKSTRING = b"Georg says, 'All seems fine'"
 BASICAUTH=""
+
+HTTP_TLS = False
+CERT_REQS = ssl.CERT_REQUIRED
 
 # Globals
 READBUFSIZE = 1024
@@ -138,8 +142,10 @@ class session(Thread):
         self.cookie = None
         if o.scheme == "http":
             self.httpScheme = urllib3.HTTPConnectionPool
+            HTTP_TLS = False
         else:
             self.httpScheme = urllib3.HTTPSConnectionPool
+            HTTP_TLS = True
         log.debug("finished init")
 
     def parseSocks5(self, sock):
@@ -258,7 +264,13 @@ class session(Thread):
         self.target = target
         self.port = port
         cookie = None
-        conn = self.httpScheme(host=self.httpHost, port=self.httpPort)
+        if HTTP_TLS:
+            if CERT_REQS == ssl.CERT_NONE:
+                conn = self.httpScheme(host=self.httpHost, port=self.httpPort, cert_reqs=CERT_REQS, assert_hostname=False)
+            else:
+                conn = self.httpScheme(host=self.httpHost, port=self.httpPort, cert_reqs=CERT_REQS)
+        else:
+            conn = self.httpScheme(host=self.httpHost, port=self.httpPort)
         # response = conn.request("POST", self.httpPath, params, headers)
         response = conn.urlopen('POST', self.connectString + "?cmd=connect&target=%s&port=%d" % (target, port), headers=headers, body="")
         if response.status == 200:
@@ -281,14 +293,23 @@ class session(Thread):
         if BASICAUTH != "":
             headers['Authorization'] = "Basic %s" % BASICAUTH
         params = ""
-        conn = self.httpScheme(host=self.httpHost, port=self.httpPort)
+        if HTTP_TLS:
+            if CERT_REQS == ssl.CERT_NONE:
+                conn = self.httpScheme(host=self.httpHost, port=self.httpPort, cert_reqs=CERT_REQS, assert_hostname=False)
+            else:
+                conn = self.httpScheme(host=self.httpHost, port=self.httpPort, cert_reqs=CERT_REQS)
+        else:
+            conn = self.httpScheme(host=self.httpHost, port=self.httpPort)
         response = conn.request("POST", self.httpPath + "?cmd=disconnect", params, headers)
         if response.status == 200:
             log.info("[%s:%d] Connection Terminated" % (self.target, self.port))
         conn.close()
 
     def reader(self):
-        conn = urllib3.PoolManager()
+        if HTTP_TLS:
+            conn = urllib3.PoolManager(cert_reqs = CERT_REQS)
+        else:
+            conn = urllib3.PoolManager()
         while True:
             try:
                 if not self.pSocket:
@@ -339,7 +360,10 @@ class session(Thread):
 
     def writer(self):
         global READBUFSIZE
-        conn = urllib3.PoolManager()
+        if HTTP_TLS:
+            conn = urllib3.PoolManager(cert_reqs = CERT_REQS)
+        else:
+            conn = urllib3.PoolManager()
         while True:
             try:
                 self.pSocket.settimeout(1)
@@ -401,6 +425,7 @@ class session(Thread):
 
 def askGeorg(connectString, creds):
     global BASICAUTH
+    global HTTP_TLS
     connectString = connectString
     o = urlparse(connectString)
     try:
@@ -415,10 +440,19 @@ def askGeorg(connectString, creds):
     httpPath = o.path
     if o.scheme == "http":
         httpScheme = urllib3.HTTPConnectionPool
+        HTTP_TLS = False
     else:
         httpScheme = urllib3.HTTPSConnectionPool
+        HTTP_TLS = True
 
-    conn = httpScheme(host=httpHost, port=httpPort)
+    if HTTP_TLS:
+        if CERT_REQS == ssl.CERT_NONE:
+            conn = httpScheme(host=httpHost, port=httpPort, cert_reqs=CERT_REQS, assert_hostname=False)
+        else:
+            conn = httpScheme(host=httpHost, port=httpPort, cert_reqs=CERT_REQS)
+    else:
+        conn = httpScheme(host=httpHost, port=httpPort)
+
     if creds != "":
         headers = urllib3.make_headers(basic_auth=creds)
         response = conn.request("GET", httpPath, headers=headers)
@@ -458,12 +492,21 @@ if __name__ == '__main__':
     parser.add_argument("-l", "--listen-on", metavar="", help="The default listening address", default="127.0.0.1")
     parser.add_argument("-p", "--listen-port", metavar="", help="The default listening port", type=int, default="8888")
     parser.add_argument("-r", "--read-buff", metavar="", help="Local read buffer, max data to be sent per POST", type=int, default="1024")
+    parser.add_argument("-s", "--ssl", metavar="", help="check SSL certificate", type=bool, default=False)
     parser.add_argument("-u", "--url", metavar="", required=True, help="The url containing the tunnel script")
     parser.add_argument("-v", "--verbose", metavar="", help="Verbose output[INFO|DEBUG]", default="INFO")
     args = parser.parse_args()
     if (args.verbose in LEVEL):
         log.setLevel(LEVEL[args.verbose])
         log.info("Log Level set to [%s]" % args.verbose)
+
+    if (args.ssl):
+        CERT_REQS = ssl.CERT_REQUIRED
+    else:
+        log.info("Disable SSL/TLS warnings")
+        CERT_REQS = ssl.CERT_NONE
+        ssl._create_default_https_context = ssl._create_unverified_context
+        urllib3.disable_warnings()
 
     log.info("Starting socks server [%s:%d], tunnel at [%s]" % (args.listen_on, args.listen_port, args.url))
     log.info("Checking if Georg is ready")
