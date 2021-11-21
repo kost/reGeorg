@@ -21,6 +21,12 @@ You can install it via pip:
 pip install regeorg
 ```
 
+## Quick usage
+
+```
+reGeorgSocksProxy.py -p 1080 -u http://upload.sensepost.net:8080/tunnel/tunnel.jsp
+```
+
 
 Dependencies
 -----------
@@ -92,3 +98,24 @@ Tools:
 - [urllib3](https://pypi.python.org/pypi/urllib3)
 
 - [proxychains](http://sourceforge.net/projects/proxychains/)
+
+##  More agents/tunnels
+
+List of tunnels / agent compatible with this release
+
+- ReGeorGo - regeorg in Giolang: https://github.com/kost/regeorgo
+
+- original regeorg tunnels : https://github.com/sensepost/regeorg
+
+
+# References
+
+References to original tool, similar tools and forks
+
+- original regeorg: https://github.com/sensepost/regeorg
+
+- Refactored regeorg (not compatible with this): https://github.com/L-codes/Neo-reGeorg
+
+- pivotnacci - tool inspired by the reGeorg: https://github.com/blackarrowsec/pivotnacci
+
+
