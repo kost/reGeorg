@@ -1,7 +1,9 @@
 reGeorg
 =========
 Fork of regeorg to include support for python2 and python3 and to have
-proper socks4 and socks5 support.
+proper socks4 and socks5 support. Since original regeorg is not actively
+maintained, this fork is born.
+
 
 
 ```                    _____
@@ -23,8 +25,16 @@ pip install regeorg
 
 ## Quick usage
 
+Place tunnel script from tunnels subdirectory somewhere on the webserver and issue
+following command locally:
+
 ```
 reGeorgSocksProxy.py -p 1080 -u http://upload.sensepost.net:8080/tunnel/tunnel.jsp
+```
+
+Now, you can browse locally using socks4/socks5, for example:
+```
+curl -x socks5://127.0.0.1:1080/ http://192.168.1.1
 ```
 
 
