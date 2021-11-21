@@ -34,18 +34,19 @@ Usage
 --------------
 
 ```
-$ reGeorgSocksProxy.py [-h] [-l] [-p] [-r] -u  [-v]
+usage: reGeorgSocksProxy.py [-h] [-c] [-l] [-p] [-r] [-s] -u  [-v]
 
 Socks server for reGeorg HTTP(s) tunneller
 
 optional arguments:
   -h, --help           show this help message and exit
-  -l , --listen-on     The default listening address
-  -p , --listen-port   The default listening port
+  -c , --creds         Credentials for basic authentication as user:pass
+  -l , --listen-on     The default listening socks address
+  -p , --listen-port   The default listening socks port
   -r , --read-buff     Local read buffer, max data to be sent per POST
+  -s , --ssl           check TLS/SSL certificate
   -u , --url           The url containing the tunnel script
   -v , --verbose       Verbose output[INFO|DEBUG]
-
 ```
 
 * **Step 1.**
@@ -74,22 +75,20 @@ License
 
 MIT
 
-Credits
-----
+# Credits
 
-This fork is maintained by
-
-[@k0st]:http://twitter.com/k0st
+This fork is maintained by [@k0st](http://twitter.com/k0st).
 
 Original by:
-[@\_w\_m\_\_]:http://twitter.com/_w_m__
 
-[@trowalts]:http://twitter.com/trowalts
+- [@\_w\_m\_\_](http://twitter.com/_w_m__)
 
-[@kamp_staaldraad]:http://twitter.com/kamp_staaldraad
+- [@trowalts](http://twitter.com/trowalts)
+
+- [@kamp_staaldraad](http://twitter.com/kamp_staaldraad)
 
 Tools:
 
-[urllib3]:https://pypi.python.org/pypi/urllib3
+- [urllib3](https://pypi.python.org/pypi/urllib3)
 
-[proxychains]:http://sourceforge.net/projects/proxychains/
+- [proxychains](http://sourceforge.net/projects/proxychains/)
